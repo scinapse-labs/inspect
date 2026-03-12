@@ -1,5 +1,5 @@
 import { fetchPr, fetchPrDiff, isNoiseFile, PrInfo } from "./github";
-import { Finding, reviewV26, fetchTriage } from "./openai";
+import { Finding, reviewV26, fetchTriage, TriageResult } from "./openai";
 
 export interface ReviewResult {
   pr: {
@@ -26,6 +26,7 @@ export interface ReviewResult {
     inspect_url: string;
     inspect_key_len: number;
     triage_len: number;
+    triage_debug: string;
   };
 }
 
@@ -49,13 +50,14 @@ export async function runReview(
   const start = Date.now();
 
   // Fetch PR metadata, diff, and entity triage in parallel
-  const [pr, diff, triage] = await Promise.all([
+  const [pr, diff, triageResult] = await Promise.all([
     fetchPr(githubToken, repo, prNumber),
     fetchPrDiff(githubToken, repo, prNumber),
     inspectApiUrl && inspectApiKey
       ? fetchTriage(inspectApiKey, inspectApiUrl, repo, prNumber)
-      : Promise.resolve(""),
+      : Promise.resolve({ text: "", debug: "no url/key" } as TriageResult),
   ]);
+  const triage = triageResult.text;
 
   const triageMs = Date.now() - start;
   const visibleFiles = pr.files.filter((f) => !isNoiseFile(f.filename));
@@ -90,6 +92,7 @@ export async function runReview(
       inspect_url: inspectApiUrl || "(empty)",
       inspect_key_len: inspectApiKey.length,
       triage_len: triage.length,
+      triage_debug: triageResult.debug,
     },
   };
 }
