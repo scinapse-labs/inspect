@@ -35,6 +35,7 @@ export async function runReview(
   const inspectApiKey = (process.env.INSPECT_API_KEY || "").replace(/"/g, "");
 
   console.log(`[review] inspect-api: url=${inspectApiUrl ? "set" : "empty"}, key=${inspectApiKey ? "set" : "empty"}`);
+  console.log(`[review] url-value=${inspectApiUrl}, key-len=${inspectApiKey.length}`);
 
   if (!openaiKey || !githubToken) {
     throw new Error("Server missing OPENAI_API_KEY or GITHUB_TOKEN");
@@ -79,6 +80,11 @@ export async function runReview(
       triage_ms: triageMs,
       review_ms: reviewMs,
       total_ms: totalMs,
+    },
+    _debug: {
+      inspect_url: inspectApiUrl || "(empty)",
+      inspect_key_len: inspectApiKey.length,
+      triage_len: triage.length,
     },
   };
 }
