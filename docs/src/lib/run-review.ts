@@ -22,6 +22,11 @@ export interface ReviewResult {
     review_ms: number;
     total_ms: number;
   };
+  _debug?: {
+    inspect_url: string;
+    inspect_key_len: number;
+    triage_len: number;
+  };
 }
 
 export async function runReview(
