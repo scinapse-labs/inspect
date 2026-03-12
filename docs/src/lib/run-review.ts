@@ -1,5 +1,5 @@
 import { fetchPr, fetchPrDiff, isNoiseFile, PrInfo } from "./github";
-import { Finding, reviewV26, fetchTriage } from "./openai";
+import { Finding, TokenUsage, reviewV26, fetchTriage } from "./openai";
 
 export interface ReviewResult {
   pr: {
@@ -17,6 +17,7 @@ export interface ReviewResult {
     files_skipped: number;
     entity_triage: boolean;
   };
+  usage: TokenUsage;
   timing: {
     triage_ms: number;
     review_ms: number;
@@ -53,7 +54,7 @@ export async function runReview(
   const visibleFiles = pr.files.filter((f) => !isNoiseFile(f.filename));
 
   const reviewStart = Date.now();
-  const findings = await reviewV26(openaiKey, model, pr.title, diff, triage);
+  const reviewOutput = await reviewV26(openaiKey, model, pr.title, diff, triage);
   const reviewMs = Date.now() - reviewStart;
   const totalMs = Date.now() - start;
 
@@ -66,13 +67,14 @@ export async function runReview(
       deletions: pr.deletions,
       changed_files: pr.changed_files,
     },
-    findings,
+    findings: reviewOutput.findings,
     summary: {
-      total_findings: findings.length,
+      total_findings: reviewOutput.findings.length,
       files_analyzed: visibleFiles.length,
       files_skipped: pr.files.length - visibleFiles.length,
       entity_triage: triage ? true : false,
     },
+    usage: reviewOutput.usage,
     timing: {
       triage_ms: triageMs,
       review_ms: reviewMs,

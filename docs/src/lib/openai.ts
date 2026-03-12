@@ -25,6 +25,16 @@ export interface Finding {
   file?: string;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface ReviewOutput {
+  findings: Finding[];
+  usage: TokenUsage;
+}
+
 interface TriageEntity {
   name: string;
   type: string;
@@ -129,6 +139,12 @@ function parseIssues(text: string): Finding[] {
   }
 }
 
+interface LLMResult {
+  content: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
 async function callOpenAI(
   apiKey: string,
   model: string,
@@ -136,7 +152,7 @@ async function callOpenAI(
   prompt: string,
   temperature: number,
   seed?: number
-): Promise<string> {
+): Promise<LLMResult> {
   const body: any = {
     model,
     messages: [
@@ -162,7 +178,11 @@ async function callOpenAI(
   }
 
   const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "";
+  return {
+    content: data.choices?.[0]?.message?.content || "",
+    input_tokens: data.usage?.prompt_tokens || 0,
+    output_tokens: data.usage?.completion_tokens || 0,
+  };
 }
 
 /** Extract file basenames from a unified diff. */
@@ -217,9 +237,12 @@ export async function reviewV26(
   prTitle: string,
   diff: string,
   triage: string = ""
-): Promise<Finding[]> {
+): Promise<ReviewOutput> {
   const truncated = truncateDiff(diff, 80000);
   const diffBasenames = extractDiffFiles(diff);
+
+  let totalInput = 0;
+  let totalOutput = 0;
 
   // Build all prompts with triage context
   const pData = fillPrompt(PROMPT_DATA, prTitle, truncated, triage);
@@ -252,7 +275,9 @@ export async function reviewV26(
 
   for (const result of results) {
     if (result.status === "fulfilled") {
-      for (const f of parseIssues(result.value)) {
+      totalInput += result.value.input_tokens;
+      totalOutput += result.value.output_tokens;
+      for (const f of parseIssues(result.value.content)) {
         const key = f.issue.toLowerCase().slice(0, 80);
         if (!seen.has(key)) {
           seen.add(key);
@@ -265,8 +290,13 @@ export async function reviewV26(
   // Structural file filter
   const filtered = structuralFileFilter(allFindings, diffBasenames);
 
-  if (filtered.length === 0) return [];
-  if (filtered.length <= 2) return filtered;
+  const mkOutput = (findings: Finding[]): ReviewOutput => ({
+    findings,
+    usage: { input_tokens: totalInput, output_tokens: totalOutput },
+  });
+
+  if (filtered.length === 0) return mkOutput([]);
+  if (filtered.length <= 2) return mkOutput(filtered);
 
   // Validation pass
   const candidatesText = filtered
@@ -281,10 +311,12 @@ export async function reviewV26(
     .replace("{candidates}", candidatesText);
 
   try {
-    const validateText = await callOpenAI(apiKey, model, SYSTEM_VALIDATE, validatePrompt, 0, 42);
-    const validated = parseIssues(validateText);
-    return validated.slice(0, 7);
+    const validateResult = await callOpenAI(apiKey, model, SYSTEM_VALIDATE, validatePrompt, 0, 42);
+    totalInput += validateResult.input_tokens;
+    totalOutput += validateResult.output_tokens;
+    const validated = parseIssues(validateResult.content);
+    return mkOutput(validated.slice(0, 7));
   } catch {
-    return filtered.slice(0, 5);
+    return mkOutput(filtered.slice(0, 5));
   }
 }

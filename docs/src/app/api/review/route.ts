@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         pr_title: result.pr.title,
         status: "complete",
         findings: result.findings,
-        summary: result.summary,
+        summary: { ...result.summary, usage: result.usage },
         timing: result.timing,
         pr_meta: result.pr,
         completed_at: new Date().toISOString(),
