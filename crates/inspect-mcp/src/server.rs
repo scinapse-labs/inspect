@@ -441,7 +441,7 @@ impl InspectServer {
             .collect();
 
         let file_pairs = client
-            .get_file_pairs(&params.repo, &visible_files, &pr.base_ref, &pr.head_ref)
+            .get_file_pairs(&params.repo, &visible_files, &pr.base_sha, &pr.head_sha)
             .await;
 
         let result = analyze_remote(&file_pairs).map_err(internal_err)?;

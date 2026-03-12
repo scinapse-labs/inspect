@@ -123,7 +123,7 @@ pub async fn create_triage(
         .collect();
 
     let file_pairs = client
-        .get_file_pairs(&req.repo, &visible_files, &pr.base_ref, &pr.head_ref)
+        .get_file_pairs(&req.repo, &visible_files, &pr.base_sha, &pr.head_sha)
         .await;
 
     let result = match analyze_remote(&file_pairs) {
@@ -245,7 +245,7 @@ async fn run_review(state: Arc<AppState>, job_id: String) {
         .collect();
 
     let file_pairs = client
-        .get_file_pairs(&repo, &visible_files, &pr.base_ref, &pr.head_ref)
+        .get_file_pairs(&repo, &visible_files, &pr.base_sha, &pr.head_sha)
         .await;
 
     let result = match analyze_remote(&file_pairs) {

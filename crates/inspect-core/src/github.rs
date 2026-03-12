@@ -67,6 +67,7 @@ struct GraphQLPullRequest {
     head_ref_name: String,
     base_ref_name: String,
     head_ref_oid: String,
+    base_ref_oid: String,
     files: FileConnection,
 }
 
@@ -128,6 +129,7 @@ pub struct PullRequest {
     pub head_ref: String,
     pub base_ref: String,
     pub head_sha: String,
+    pub base_sha: String,
     pub files: Vec<PrFile>,
 }
 
@@ -390,6 +392,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       headRefName
       baseRefName
       headRefOid
+      baseRefOid
       files(first: 100) {
         pageInfo { hasNextPage endCursor }
         nodes {
@@ -455,6 +458,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
             head_ref: pr.head_ref_name,
             base_ref: pr.base_ref_name,
             head_sha: pr.head_ref_oid,
+            base_sha: pr.base_ref_oid,
             files,
         })
     }

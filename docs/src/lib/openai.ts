@@ -36,18 +36,13 @@ interface TriageEntity {
   public_api: boolean;
 }
 
-export interface TriageResult {
-  text: string;
-  debug: string;
-}
-
 /** Call inspect-api /v1/triage for entity-level risk analysis. */
 export async function fetchTriage(
   apiKey: string,
   apiUrl: string,
   repo: string,
   prNumber: number
-): Promise<TriageResult> {
+): Promise<string> {
   try {
     const resp = await fetch(`${apiUrl}/v1/triage`, {
       method: "POST",
@@ -58,21 +53,18 @@ export async function fetchTriage(
       body: JSON.stringify({ repo, pr_number: prNumber }),
     });
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      return { text: "", debug: `http ${resp.status}: ${errText.slice(0, 100)}` };
-    }
+    if (!resp.ok) return "";
 
     const data = await resp.json();
     const entities: TriageEntity[] = data.entities || [];
-    if (entities.length === 0) return { text: "", debug: `ok but 0 entities` };
+    if (entities.length === 0) return "";
 
     const meaningful = entities
       .filter((e) => ["modified", "added"].includes(e.change_type) && e.type !== "chunk")
       .sort((a, b) => parseFloat(b.score) - parseFloat(a.score))
       .slice(0, 20);
 
-    if (meaningful.length === 0) return { text: "", debug: `ok ${entities.length} entities but 0 meaningful` };
+    if (meaningful.length === 0) return "";
 
     const byFile: Record<string, TriageEntity[]> = {};
     for (const e of meaningful) {
@@ -93,9 +85,9 @@ export async function fetchTriage(
         lines.push(`  - ${e.name} (${e.type}, ${e.change_type}, ${e.classification})${pub}`);
       }
     }
-    return { text: lines.join("\n"), debug: `ok ${entities.length} entities, ${meaningful.length} meaningful` };
-  } catch (e) {
-    return { text: "", debug: `error: ${e}` };
+    return lines.join("\n");
+  } catch {
+    return "";
   }
 }
 

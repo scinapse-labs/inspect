@@ -128,8 +128,11 @@ async fn run_remote(args: &PrArgs, remote_repo: &str) {
 
     eprintln!("Fetching {} file contents...", visible_files.len());
 
+    // Use head_sha (commit SHA) instead of head_ref (branch name) for fetching
+    // after content. For fork PRs, the branch name doesn't exist on the base repo,
+    // but the commit SHA is accessible via GitHub's merge refs.
     let file_pairs = client
-        .get_file_pairs(remote_repo, &visible_files, &pr.base_ref, &pr.head_ref)
+        .get_file_pairs(remote_repo, &visible_files, &pr.base_sha, &pr.head_sha)
         .await;
 
     match analyze_remote(&file_pairs) {

@@ -1,5 +1,5 @@
 import { fetchPr, fetchPrDiff, isNoiseFile, PrInfo } from "./github";
-import { Finding, reviewV26, fetchTriage, TriageResult } from "./openai";
+import { Finding, reviewV26, fetchTriage } from "./openai";
 
 export interface ReviewResult {
   pr: {
@@ -22,12 +22,6 @@ export interface ReviewResult {
     review_ms: number;
     total_ms: number;
   };
-  _debug?: {
-    inspect_url: string;
-    inspect_key_len: number;
-    triage_len: number;
-    triage_debug: string;
-  };
 }
 
 export async function runReview(
@@ -40,9 +34,6 @@ export async function runReview(
   const inspectApiUrl = (process.env.INSPECT_API_URL || "").replace(/"/g, "");
   const inspectApiKey = (process.env.INSPECT_API_KEY || "").replace(/"/g, "");
 
-  console.log(`[review] inspect-api: url=${inspectApiUrl ? "set" : "empty"}, key=${inspectApiKey ? "set" : "empty"}`);
-  console.log(`[review] url-value=${inspectApiUrl}, key-len=${inspectApiKey.length}`);
-
   if (!openaiKey || !githubToken) {
     throw new Error("Server missing OPENAI_API_KEY or GITHUB_TOKEN");
   }
@@ -50,14 +41,13 @@ export async function runReview(
   const start = Date.now();
 
   // Fetch PR metadata, diff, and entity triage in parallel
-  const [pr, diff, triageResult] = await Promise.all([
+  const [pr, diff, triage] = await Promise.all([
     fetchPr(githubToken, repo, prNumber),
     fetchPrDiff(githubToken, repo, prNumber),
     inspectApiUrl && inspectApiKey
       ? fetchTriage(inspectApiKey, inspectApiUrl, repo, prNumber)
-      : Promise.resolve({ text: "", debug: "no url/key" } as TriageResult),
+      : Promise.resolve(""),
   ]);
-  const triage = triageResult.text;
 
   const triageMs = Date.now() - start;
   const visibleFiles = pr.files.filter((f) => !isNoiseFile(f.filename));
@@ -87,12 +77,6 @@ export async function runReview(
       triage_ms: triageMs,
       review_ms: reviewMs,
       total_ms: totalMs,
-    },
-    _debug: {
-      inspect_url: inspectApiUrl || "(empty)",
-      inspect_key_len: inspectApiKey.length,
-      triage_len: triage.length,
-      triage_debug: triageResult.debug,
     },
   };
 }
