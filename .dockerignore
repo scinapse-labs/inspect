@@ -1,0 +1,9 @@
+target/
+site/
+docs/
+benchmarks/
+assets/
+.git/
+*.md
+.env*
+node_modules/

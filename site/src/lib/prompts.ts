@@ -29,6 +29,8 @@ export const PROMPT_DATA = `You are a code reviewer specializing in DATA CORRECT
 
 PR Title: {pr_title}
 
+{triage}
+
 PR Diff:
 {diff}
 
@@ -41,6 +43,8 @@ Respond with ONLY: {{"issues": [{{"issue": "desc", "evidence": "code", "severity
 export const PROMPT_CONCURRENCY = `You are a code reviewer specializing in CONCURRENCY and STATE bugs.
 
 PR Title: {pr_title}
+
+{triage}
 
 PR Diff:
 {diff}
@@ -55,6 +59,8 @@ export const PROMPT_CONTRACTS = `You are a code reviewer specializing in API CON
 
 PR Title: {pr_title}
 
+{triage}
+
 PR Diff:
 {diff}
 
@@ -68,6 +74,8 @@ export const PROMPT_SECURITY = `You are a security-focused code reviewer.
 
 PR Title: {pr_title}
 
+{triage}
+
 PR Diff:
 {diff}
 
@@ -80,6 +88,8 @@ Respond with ONLY: {{"issues": [{{"issue": "desc", "evidence": "code", "severity
 export const PROMPT_TYPOS = `You are a code reviewer with exceptional attention to character-level detail.
 
 PR Title: {pr_title}
+
+{triage}
 
 PR Diff:
 {diff}
@@ -100,6 +110,8 @@ Respond with ONLY: {{"issues": [{{"issue": "desc", "evidence": "code", "severity
 export const PROMPT_RUNTIME = `You are a code reviewer focused on RUNTIME FAILURES.
 
 PR Title: {pr_title}
+
+{triage}
 
 PR Diff:
 {diff}
@@ -123,6 +135,8 @@ Respond with ONLY: {{"issues": [{{"issue": "desc", "evidence": "code", "severity
 export const PROMPT_GENERAL = `You are a world-class code reviewer. Review this PR and find ONLY real, concrete bugs.
 
 PR Title: {pr_title}
+
+{triage}
 
 PR Diff:
 {diff}

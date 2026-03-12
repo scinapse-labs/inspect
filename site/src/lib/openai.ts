@@ -25,6 +25,73 @@ export interface Finding {
   file?: string;
 }
 
+interface TriageEntity {
+  name: string;
+  type: string;
+  file: string;
+  risk: string;
+  score: string;
+  classification: string;
+  change_type: string;
+  public_api: boolean;
+}
+
+/** Call inspect-api /v1/triage for entity-level risk analysis. */
+export async function fetchTriage(
+  apiKey: string,
+  apiUrl: string,
+  repo: string,
+  prNumber: number
+): Promise<string> {
+  try {
+    const resp = await fetch(`${apiUrl}/v1/triage`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ repo, pr_number: prNumber }),
+    });
+
+    if (!resp.ok) return "";
+
+    const data = await resp.json();
+    const entities: TriageEntity[] = data.entities || [];
+    if (entities.length === 0) return "";
+
+    // Build rich triage section (matches inspect-api's build_rich_triage format)
+    const meaningful = entities
+      .filter((e) => ["modified", "added"].includes(e.change_type) && e.type !== "chunk")
+      .sort((a, b) => parseFloat(b.score) - parseFloat(a.score))
+      .slice(0, 20);
+
+    if (meaningful.length === 0) return "";
+
+    const byFile: Record<string, TriageEntity[]> = {};
+    for (const e of meaningful) {
+      (byFile[e.file] ??= []).push(e);
+    }
+
+    const fileEntries = Object.entries(byFile).sort(
+      (a, b) =>
+        Math.max(...b[1].map((e) => parseFloat(e.score))) -
+        Math.max(...a[1].map((e) => parseFloat(e.score)))
+    );
+
+    const lines = ["## Entity-level triage (highest-risk changes):"];
+    for (const [fp, ents] of fileEntries) {
+      lines.push(`\n**${fp}**:`);
+      for (const e of ents) {
+        const pub = e.public_api ? " [PUBLIC API]" : "";
+        lines.push(`  - ${e.name} (${e.type}, ${e.change_type}, ${e.classification})${pub}`);
+      }
+    }
+    return lines.join("\n");
+  } catch {
+    return "";
+  }
+}
+
 function stripCodeFences(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith("```")) {
@@ -137,8 +204,11 @@ function structuralFileFilter(issues: Finding[], diffBasenames: Set<string>): Fi
   });
 }
 
-function fillPrompt(template: string, prTitle: string, diff: string): string {
-  return template.replace("{pr_title}", prTitle).replace("{diff}", diff);
+function fillPrompt(template: string, prTitle: string, diff: string, triage: string): string {
+  return template
+    .replace("{pr_title}", prTitle)
+    .replace("{triage}", triage)
+    .replace("{diff}", diff);
 }
 
 /** v26: 9 lenses (6 specialized + 1 general + 2 diversity) with structural filter + validation. */
@@ -146,19 +216,20 @@ export async function reviewV26(
   apiKey: string,
   model: string,
   prTitle: string,
-  diff: string
+  diff: string,
+  triage: string = ""
 ): Promise<Finding[]> {
   const truncated = truncateDiff(diff, 80000);
   const diffBasenames = extractDiffFiles(diff);
 
-  // Build all prompts
-  const pData = fillPrompt(PROMPT_DATA, prTitle, truncated);
-  const pConcurrency = fillPrompt(PROMPT_CONCURRENCY, prTitle, truncated);
-  const pContracts = fillPrompt(PROMPT_CONTRACTS, prTitle, truncated);
-  const pSecurity = fillPrompt(PROMPT_SECURITY, prTitle, truncated);
-  const pTypos = fillPrompt(PROMPT_TYPOS, prTitle, truncated);
-  const pRuntime = fillPrompt(PROMPT_RUNTIME, prTitle, truncated);
-  const pGeneral = fillPrompt(PROMPT_GENERAL, prTitle, truncated);
+  // Build all prompts with triage context
+  const pData = fillPrompt(PROMPT_DATA, prTitle, truncated, triage);
+  const pConcurrency = fillPrompt(PROMPT_CONCURRENCY, prTitle, truncated, triage);
+  const pContracts = fillPrompt(PROMPT_CONTRACTS, prTitle, truncated, triage);
+  const pSecurity = fillPrompt(PROMPT_SECURITY, prTitle, truncated, triage);
+  const pTypos = fillPrompt(PROMPT_TYPOS, prTitle, truncated, triage);
+  const pRuntime = fillPrompt(PROMPT_RUNTIME, prTitle, truncated, triage);
+  const pGeneral = fillPrompt(PROMPT_GENERAL, prTitle, truncated, triage);
 
   // 9 lenses in parallel
   const results = await Promise.allSettled([

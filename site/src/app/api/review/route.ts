@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPr, fetchPrDiff, isNoiseFile } from "@/lib/github";
-import { reviewV26 } from "@/lib/openai";
+import { reviewV26, fetchTriage } from "@/lib/openai";
 import { validateApiKey } from "@/lib/validate-key";
 
 export const maxDuration = 300;
@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
   const openaiKey = process.env.OPENAI_API_KEY;
   const githubToken = process.env.GITHUB_TOKEN;
   const model = process.env.OPENAI_MODEL || "gpt-5.2";
+  const inspectApiUrl = process.env.INSPECT_API_URL || "";
+  const inspectApiKey = process.env.INSPECT_API_KEY || "";
 
   if (!openaiKey || !githubToken) {
     return NextResponse.json(
@@ -38,19 +40,22 @@ export async function POST(req: NextRequest) {
   const start = Date.now();
 
   try {
-    // Fetch PR metadata and diff in parallel
-    const [pr, diff] = await Promise.all([
+    // Fetch PR metadata, diff, and entity triage in parallel
+    const [pr, diff, triage] = await Promise.all([
       fetchPr(githubToken, repo, pr_number),
       fetchPrDiff(githubToken, repo, pr_number),
+      inspectApiUrl && inspectApiKey
+        ? fetchTriage(inspectApiKey, inspectApiUrl, repo, pr_number)
+        : Promise.resolve(""),
     ]);
 
     const triageMs = Date.now() - start;
 
     const visibleFiles = pr.files.filter((f) => !isNoiseFile(f.filename));
 
-    // Run LLM review
+    // Run LLM review with entity triage context
     const reviewStart = Date.now();
-    const findings = await reviewV26(openaiKey, model, pr.title, diff);
+    const findings = await reviewV26(openaiKey, model, pr.title, diff, triage);
     const reviewMs = Date.now() - reviewStart;
 
     const totalMs = Date.now() - start;
@@ -69,6 +74,7 @@ export async function POST(req: NextRequest) {
         total_findings: findings.length,
         files_analyzed: visibleFiles.length,
         files_skipped: pr.files.length - visibleFiles.length,
+        entity_triage: triage ? true : false,
       },
       timing: {
         triage_ms: triageMs,
