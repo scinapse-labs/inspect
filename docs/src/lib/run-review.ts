@@ -1,5 +1,5 @@
 import { fetchPr, fetchPrDiff, isNoiseFile, PrInfo } from "./github";
-import { Finding, TokenUsage, reviewV26, fetchTriage } from "./openai";
+import { Finding, TokenUsage, TriageResult, reviewV29, fetchTriageRich } from "./openai";
 
 export interface ReviewResult {
   pr: {
@@ -42,19 +42,20 @@ export async function runReview(
   const start = Date.now();
 
   // Fetch PR metadata, diff, and entity triage in parallel
-  const [pr, diff, triage] = await Promise.all([
+  const emptyTriage: TriageResult = { triageText: "", entities: [] };
+  const [pr, diff, triageResult] = await Promise.all([
     fetchPr(githubToken, repo, prNumber),
     fetchPrDiff(githubToken, repo, prNumber),
     inspectApiUrl && inspectApiKey
-      ? fetchTriage(inspectApiKey, inspectApiUrl, repo, prNumber)
-      : Promise.resolve(""),
+      ? fetchTriageRich(inspectApiKey, inspectApiUrl, repo, prNumber)
+      : Promise.resolve(emptyTriage),
   ]);
 
   const triageMs = Date.now() - start;
   const visibleFiles = pr.files.filter((f) => !isNoiseFile(f.filename));
 
   const reviewStart = Date.now();
-  const reviewOutput = await reviewV26(openaiKey, model, pr.title, diff, triage);
+  const reviewOutput = await reviewV29(openaiKey, model, pr.title, diff, triageResult);
   const reviewMs = Date.now() - reviewStart;
   const totalMs = Date.now() - start;
 
@@ -72,7 +73,7 @@ export async function runReview(
       total_findings: reviewOutput.findings.length,
       files_analyzed: visibleFiles.length,
       files_skipped: pr.files.length - visibleFiles.length,
-      entity_triage: triage ? true : false,
+      entity_triage: triageResult.triageText ? true : false,
     },
     usage: reviewOutput.usage,
     timing: {

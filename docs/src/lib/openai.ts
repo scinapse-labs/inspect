@@ -35,7 +35,7 @@ export interface ReviewOutput {
   usage: TokenUsage;
 }
 
-interface TriageEntity {
+export interface TriageEntity {
   name: string;
   type: string;
   file: string;
@@ -44,15 +44,28 @@ interface TriageEntity {
   classification: string;
   change_type: string;
   public_api: boolean;
+  before_content?: string;
+  after_content?: string;
+  blast_radius?: number;
+  dependent_count?: number;
+  dependency_count?: number;
+  dependents?: { name: string; file: string }[];
+  dependencies?: { name: string; file: string }[];
 }
 
-/** Call inspect-api /v1/triage for entity-level risk analysis. */
-export async function fetchTriage(
+export interface TriageResult {
+  triageText: string;
+  entities: TriageEntity[];
+}
+
+/** Call inspect-api /v1/triage for entity-level risk analysis. Returns both formatted text and raw entities. */
+export async function fetchTriageRich(
   apiKey: string,
   apiUrl: string,
   repo: string,
   prNumber: number
-): Promise<string> {
+): Promise<TriageResult> {
+  const empty: TriageResult = { triageText: "", entities: [] };
   try {
     const resp = await fetch(`${apiUrl}/v1/triage`, {
       method: "POST",
@@ -63,18 +76,18 @@ export async function fetchTriage(
       body: JSON.stringify({ repo, pr_number: prNumber }),
     });
 
-    if (!resp.ok) return "";
+    if (!resp.ok) return empty;
 
     const data = await resp.json();
     const entities: TriageEntity[] = data.entities || [];
-    if (entities.length === 0) return "";
+    if (entities.length === 0) return empty;
 
     const meaningful = entities
       .filter((e) => ["modified", "added"].includes(e.change_type) && e.type !== "chunk")
       .sort((a, b) => parseFloat(b.score) - parseFloat(a.score))
-      .slice(0, 20);
+      .slice(0, 30);
 
-    if (meaningful.length === 0) return "";
+    if (meaningful.length === 0) return { triageText: "", entities };
 
     const byFile: Record<string, TriageEntity[]> = {};
     for (const e of meaningful) {
@@ -87,18 +100,64 @@ export async function fetchTriage(
         Math.max(...a[1].map((e) => parseFloat(e.score)))
     );
 
-    const lines = ["## Entity-level triage (highest-risk changes):"];
+    const lines = ["## Entity-level triage (highest-risk changes, ranked by impact):"];
     for (const [fp, ents] of fileEntries) {
       lines.push(`\n**${fp}**:`);
       for (const e of ents) {
         const pub = e.public_api ? " [PUBLIC API]" : "";
-        lines.push(`  - ${e.name} (${e.type}, ${e.change_type}, ${e.classification})${pub}`);
+        const score = parseFloat(e.score);
+        const parts = [`${e.name} (${e.type}, ${e.change_type}, ${e.classification})${pub}`];
+        parts.push(`risk=${score.toFixed(2)}`);
+        if (e.blast_radius && e.blast_radius > 0) parts.push(`blast=${e.blast_radius}`);
+        if (e.dependent_count && e.dependent_count > 0) parts.push(`callers=${e.dependent_count}`);
+        if (e.dependency_count && e.dependency_count > 0) parts.push(`deps=${e.dependency_count}`);
+        lines.push(`  - ${parts.join(" ")}`);
       }
     }
-    return lines.join("\n");
+    return { triageText: lines.join("\n"), entities };
   } catch {
-    return "";
+    return empty;
   }
+}
+
+/** Build entity context for validation: only entities mentioned in candidate issues. */
+export function buildValidationEntityContext(
+  entities: TriageEntity[],
+  candidates: Finding[]
+): string {
+  if (entities.length === 0 || candidates.length === 0) return "";
+
+  const combined = candidates.map((c) => c.issue.toLowerCase()).join(" ");
+
+  const matched = entities.filter((e) => {
+    if (!e.name || e.type === "chunk") return false;
+    if (!(e.before_content || e.after_content)) return false;
+    return combined.includes(e.name.toLowerCase());
+  });
+
+  if (matched.length === 0) return "";
+
+  matched.sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+  const top = matched.slice(0, 10);
+
+  const sections: string[] = [];
+  let total = 0;
+
+  for (const e of top) {
+    let section = `\n**${e.name}** (${e.type}) in ${e.file}:`;
+    if (e.before_content) {
+      section += `\nBEFORE:\n\`\`\`\n${e.before_content.slice(0, 1000)}\n\`\`\``;
+    }
+    if (e.after_content) {
+      section += `\nAFTER:\n\`\`\`\n${e.after_content.slice(0, 1000)}\n\`\`\``;
+    }
+
+    total += section.length;
+    if (total > 20000) break;
+    sections.push(section);
+  }
+
+  return sections.join("\n");
 }
 
 function stripCodeFences(text: string): string {
@@ -223,20 +282,25 @@ function structuralFileFilter(issues: Finding[], diffBasenames: Set<string>): Fi
   });
 }
 
-function fillPrompt(template: string, prTitle: string, diff: string, triage: string): string {
+function fillPrompt(
+  template: string,
+  prTitle: string,
+  diff: string,
+  triage: string
+): string {
   return template
     .replace("{pr_title}", prTitle)
     .replace("{triage}", triage)
     .replace("{diff}", diff);
 }
 
-/** v26: 9 lenses (6 specialized + 1 general + 2 diversity) with structural filter + validation. */
-export async function reviewV26(
+/** v29: Enriched triage (risk scores, blast radius, dep counts) + 80K diff + standard validation with entity verification. */
+export async function reviewV29(
   apiKey: string,
   model: string,
   prTitle: string,
   diff: string,
-  triage: string = ""
+  triageResult: TriageResult
 ): Promise<ReviewOutput> {
   const truncated = truncateDiff(diff, 80000);
   const diffBasenames = extractDiffFiles(diff);
@@ -244,27 +308,24 @@ export async function reviewV26(
   let totalInput = 0;
   let totalOutput = 0;
 
-  // Build all prompts with triage context
-  const pData = fillPrompt(PROMPT_DATA, prTitle, truncated, triage);
-  const pConcurrency = fillPrompt(PROMPT_CONCURRENCY, prTitle, truncated, triage);
-  const pContracts = fillPrompt(PROMPT_CONTRACTS, prTitle, truncated, triage);
-  const pSecurity = fillPrompt(PROMPT_SECURITY, prTitle, truncated, triage);
-  const pTypos = fillPrompt(PROMPT_TYPOS, prTitle, truncated, triage);
-  const pRuntime = fillPrompt(PROMPT_RUNTIME, prTitle, truncated, triage);
-  const pGeneral = fillPrompt(PROMPT_GENERAL, prTitle, truncated, triage);
+  // Build all prompts with enriched triage (no entity context in lenses)
+  const pData = fillPrompt(PROMPT_DATA, prTitle, truncated, triageResult.triageText);
+  const pConcurrency = fillPrompt(PROMPT_CONCURRENCY, prTitle, truncated, triageResult.triageText);
+  const pContracts = fillPrompt(PROMPT_CONTRACTS, prTitle, truncated, triageResult.triageText);
+  const pSecurity = fillPrompt(PROMPT_SECURITY, prTitle, truncated, triageResult.triageText);
+  const pTypos = fillPrompt(PROMPT_TYPOS, prTitle, truncated, triageResult.triageText);
+  const pRuntime = fillPrompt(PROMPT_RUNTIME, prTitle, truncated, triageResult.triageText);
+  const pGeneral = fillPrompt(PROMPT_GENERAL, prTitle, truncated, triageResult.triageText);
 
-  // 9 lenses in parallel
+  // 9 lenses: 6 specialized@T=0 + 1 general@T=0 + 2 diversity@T=0.15
   const results = await Promise.allSettled([
-    // 6 specialized @ T=0, seed=42
     callOpenAI(apiKey, model, SYSTEM_DATA, pData, 0, 42),
     callOpenAI(apiKey, model, SYSTEM_CONCURRENCY, pConcurrency, 0, 42),
     callOpenAI(apiKey, model, SYSTEM_CONTRACTS, pContracts, 0, 42),
     callOpenAI(apiKey, model, SYSTEM_SECURITY, pSecurity, 0, 42),
     callOpenAI(apiKey, model, SYSTEM_TYPOS, pTypos, 0, 42),
     callOpenAI(apiKey, model, SYSTEM_RUNTIME, pRuntime, 0, 42),
-    // 1 general @ T=0, seed=42
     callOpenAI(apiKey, model, SYSTEM_PRECISE, pGeneral, 0, 42),
-    // 2 diversity (general) @ T=0.15, seeds 42 and 123
     callOpenAI(apiKey, model, SYSTEM_PRECISE, pGeneral, 0.15, 42),
     callOpenAI(apiKey, model, SYSTEM_PRECISE, pGeneral, 0.15, 123),
   ]);
@@ -298,7 +359,7 @@ export async function reviewV26(
   if (filtered.length === 0) return mkOutput([]);
   if (filtered.length <= 2) return mkOutput(filtered);
 
-  // Validation pass
+  // Validation pass with entity verification context
   const candidatesText = filtered
     .map(
       (f, i) =>
@@ -306,9 +367,16 @@ export async function reviewV26(
     )
     .join("\n");
 
-  const validatePrompt = PROMPT_VALIDATE.replace("{pr_title}", prTitle)
+  const entityVerifyCtx = buildValidationEntityContext(triageResult.entities, filtered);
+  const entitySection = entityVerifyCtx
+    ? `\n\n## Entity Code (before/after, for verification):\n${entityVerifyCtx}\n`
+    : "";
+
+  const validatePrompt = PROMPT_VALIDATE
+    .replace("{pr_title}", prTitle)
     .replace("{diff}", truncated)
-    .replace("{candidates}", candidatesText);
+    .replace("{candidates}", candidatesText)
+    .replace("Candidate Issues:", `${entitySection}Candidate Issues:`);
 
   try {
     const validateResult = await callOpenAI(apiKey, model, SYSTEM_VALIDATE, validatePrompt, 0, 42);
