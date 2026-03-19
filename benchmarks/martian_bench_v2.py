@@ -22187,8 +22187,8 @@ Respond with ONLY: {{"issues": [{{"issue": "desc", "evidence": "code"}}]}}"""
         run_lens("You are a character-level detail reviewer. Always respond with valid JSON.", prompt_typos_lens, 0.0),
         run_lens("You are a runtime failure analyst. Always respond with valid JSON.", prompt_runtime, 0.0),
         run_lens(sys_precise, prompt_general, 0.0),
-        run_lens(sys_precise, prompt_general, 0.3, seed=42),
-        run_lens(sys_precise, prompt_general, 0.3, seed=123),
+        run_lens(sys_precise, prompt_general, 0.1, seed=42),
+        run_lens(sys_precise, prompt_general, 0.1, seed=123),
     )
 
     # Merge + dedup (same as deep_v19)
