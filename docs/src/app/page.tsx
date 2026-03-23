@@ -41,9 +41,8 @@ export default function HomePage() {
           }}
         >
           Entity-level code review for Git. Graph-based risk scoring identifies
-          which functions need careful review. No LLM, no API key. 83.5% recall
-          on the Greptile benchmark, beating every LLM tool. Single commit in
-          5-67ms.
+          which functions need careful review. #1 on the Martian code review
+          leaderboard. 95% recall on Greptile. 5-67ms per commit.
         </p>
         <div
           className="install-box"
@@ -172,7 +171,7 @@ export default function HomePage() {
       <section>
         <h2>How it works</h2>
         <p className="section-desc">
-          Four phases. No LLM, no network calls, all local.
+          Four phases, all local. No LLM, no network calls. Optionally, send the top entities to an LLM for full review via the cloud API or self-hosted.
         </p>
 
         <div className="phase-cards">
@@ -272,6 +271,16 @@ export default function HomePage() {
             <div className="stat-detail">
               issues within any changed entity
             </div>
+          </div>
+        </div>
+
+        <div className="stat-cards" style={{ marginTop: 24 }}>
+          <div className="stat-card" style={{ borderColor: "var(--orange)" }}>
+            <div className="stat-value" style={{ color: "var(--orange)" }}>
+              #1
+            </div>
+            <div className="stat-label">Martian leaderboard</div>
+            <div className="stat-detail">47.5% F1, 137 golden bugs, 50 PRs</div>
           </div>
         </div>
 

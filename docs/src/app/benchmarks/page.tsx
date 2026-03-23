@@ -482,21 +482,79 @@ export default function BenchmarksPage() {
 
       {/* How it works */}
       <section>
-        <h2>How it works</h2>
+        <h2>How the review works</h2>
         <p className="section-desc">
-          inspect runs entity-level triage locally (free, &lt;1s), then sends
-          enriched risk metadata to an LLM with the full diff for focused review.
+          Entity-level triage focuses the LLM on the code that matters.
+          9 parallel review lenses catch different categories of bugs.
         </p>
 
-        <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 20, lineHeight: 1.7 }}>
-          <strong style={{ color: "var(--fg)" }}>The pipeline.</strong> Run
-          inspect first (free, &lt;1s) to get entity risk rankings with blast
-          radius, dependency counts, and change classifications. Send the top 30
-          entities as structured triage alongside the PR diff to 9 specialized
-          LLM lenses in parallel. Structural file filter drops hallucinations.
-          Validation pass verifies each finding against entity before/after code.
-          Top 7 findings per PR.
-        </p>
+        <div className="flow">
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--green)", color: "var(--green)" }}>1</div>
+            <div className="flow-content">
+              <div className="title">Entity triage (local, &lt;1s)</div>
+              <div className="desc">
+                Rank all changed entities by risk score: blast radius, dependents,
+                public API, entity type.
+              </div>
+            </div>
+          </div>
+          <div className="flow-connector"><div className="line" /></div>
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--cyan)", color: "var(--cyan)" }}>2</div>
+            <div className="flow-content">
+              <div className="title">BEFORE/AFTER extraction</div>
+              <div className="desc">
+                Top 10 entities get full source code from both sides of the diff, not just
+                the changed lines. 15K token budget.
+              </div>
+            </div>
+          </div>
+          <div className="flow-connector"><div className="line" /></div>
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--yellow)", color: "var(--yellow)" }}>3</div>
+            <div className="flow-content">
+              <div className="title">9 parallel review lenses</div>
+              <div className="desc">
+                6 specialized (data correctness, concurrency, contracts, security, typos,
+                runtime) + 3 general at different temperatures. Run concurrently.
+              </div>
+            </div>
+          </div>
+          <div className="flow-connector"><div className="line" /></div>
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--orange)", color: "var(--orange)" }}>4</div>
+            <div className="flow-content">
+              <div className="title">Merge + dedup</div>
+              <div className="desc">
+                Combine results from all lenses. Deduplicate by first 80 characters
+                of each finding.
+              </div>
+            </div>
+          </div>
+          <div className="flow-connector"><div className="line" /></div>
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--purple)", color: "var(--purple)" }}>5</div>
+            <div className="flow-content">
+              <div className="title">Structural file filter</div>
+              <div className="desc">
+                Drop findings that reference files not in the diff. Eliminates
+                hallucinated file paths.
+              </div>
+            </div>
+          </div>
+          <div className="flow-connector"><div className="line" /></div>
+          <div className="flow-step">
+            <div className="flow-num" style={{ borderColor: "var(--red)", color: "var(--red)" }}>6</div>
+            <div className="flow-content">
+              <div className="title">Validation + top 7</div>
+              <div className="desc">
+                Validation pass confirms each finding against the actual code and
+                entity before/after snapshots. Top 7 findings returned by confidence.
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Speed */}
