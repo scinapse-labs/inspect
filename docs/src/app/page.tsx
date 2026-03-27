@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Nav from "@/components/nav";
 
 function copyCmd(el: HTMLElement, cmd: string) {
@@ -12,18 +13,41 @@ function copyCmd(el: HTMLElement, cmd: string) {
 }
 
 export default function HomePage() {
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("visible");
+            const bars =
+              e.target.querySelectorAll<HTMLElement>(".bench-bar[data-width]");
+            bars.forEach((bar, i) => {
+              setTimeout(() => {
+                bar.style.width = bar.dataset.width + "%";
+              }, i * 100);
+            });
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    document.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="container">
       <Nav active="home" />
 
-      {/* Header */}
-      <div style={{ padding: "48px 0 32px", textAlign: "center" }}>
+      {/* Act 1: Hero */}
+      <div style={{ padding: "60px 0 20px", textAlign: "center" }}>
         <h1
           style={{
-            fontSize: 36,
+            fontSize: 42,
             fontWeight: 700,
             color: "var(--accent)",
-            letterSpacing: "-1.5px",
+            letterSpacing: "-2px",
             marginBottom: 12,
           }}
         >
@@ -33,17 +57,77 @@ export default function HomePage() {
           style={{
             fontSize: 14,
             color: "var(--dim)",
-            marginBottom: 24,
+            marginBottom: 32,
             lineHeight: 1.7,
-            maxWidth: 540,
+            maxWidth: 500,
             marginLeft: "auto",
             marginRight: "auto",
           }}
         >
-          Entity-level code review for Git. Graph-based risk scoring identifies
-          which functions need careful review. 95% recall on Greptile. 5-67ms
-          per commit.
+          Entity-level code review for Git. 8 files changed, but only 2 need
+          careful review. inspect tells you which ones in 6ms.
         </p>
+      </div>
+
+      {/* Side-by-side: git diff vs inspect */}
+      <div className="side-by-side fade-in">
+        <div className="terminal">
+          <div className="terminal-bar">
+            <div className="terminal-dot" />
+            <div className="terminal-dot" />
+            <div className="terminal-dot" />
+            <div className="terminal-title">git diff</div>
+          </div>
+          <div className="terminal-body">
+            <pre
+              dangerouslySetInnerHTML={{
+                __html: `<span class="cmd">$ git diff --stat HEAD~1</span>
+<span class="d"> src/merge/core.rs    | 47 +++++++++---</span>
+<span class="d"> src/validate.rs      | 12 ------</span>
+<span class="d"> src/config.rs        | 23 +++++++</span>
+<span class="d"> src/display.rs       |  8 ++--</span>
+<span class="d"> src/driver/mod.rs    | 15 ++++--</span>
+<span class="d"> src/driver/parse.rs  |  9 ++++</span>
+<span class="d"> tests/merge_test.rs  | 31 +++++++++</span>
+<span class="d"> README.md            |  4 +-</span>
+
+<span class="d"> 8 files changed, 128(+), 21(-)</span>
+
+<span class="d"># Which files actually matter?</span>
+<span class="d"># Read all of them to find out.</span>`,
+              }}
+            />
+          </div>
+        </div>
+        <div className="terminal">
+          <div className="terminal-bar">
+            <div className="terminal-dot" />
+            <div className="terminal-dot" />
+            <div className="terminal-dot" />
+            <div className="terminal-title">inspect</div>
+          </div>
+          <div className="terminal-body">
+            <pre
+              dangerouslySetInnerHTML={{
+                __html: `<span class="cmd">$ inspect diff HEAD~1</span>
+
+<span class="r">CRITICAL</span> <span class="w">merge_entities</span> <span class="d">(src/merge/core.rs)</span>
+  <span class="d">blast: 171  deps: 12  public API</span>
+  <span class="r">&gt;&gt;&gt; 12 dependents may be affected</span>
+
+<span class="o">HIGH</span>     <span class="w">old_validate</span> <span class="d">(src/validate.rs)</span>
+  <span class="d">blast: 8  public API  deleted</span>
+
+<span class="g">6 other changes are low risk</span>
+<span class="d">verdict:</span> <span class="o">requires_careful_review</span>`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Install */}
+      <div style={{ textAlign: "center", margin: "32px 0 40px" }}>
         <div
           className="install-box"
           onClick={(e) =>
@@ -80,98 +164,113 @@ export default function HomePage() {
             copied
           </span>
           <span style={{ color: "var(--dim)" }}>$</span> cargo install --git
-          https://github.com/Ataraxy-Labs/inspect inspect-cli
+          ...inspect inspect-cli
         </div>
       </div>
 
-      {/* Terminal demo */}
-      <div className="terminal">
-        <div className="terminal-bar">
-          <div className="terminal-dot" />
-          <div className="terminal-dot" />
-          <div className="terminal-dot" />
-          <div className="terminal-title">~/project</div>
-        </div>
-        <div className="terminal-body">
-          <pre
-            dangerouslySetInnerHTML={{
-              __html: `<span class="cmd">$ inspect diff HEAD~1</span>
-
-<span class="w">inspect</span> 12 entities changed
-  <span class="r">1 critical</span>, <span class="o">4 high</span>, <span class="y">3 medium</span>, <span class="d">4 low</span>
-
-<span class="w">groups</span> 3 logical groups:
-  <span class="d">[0]</span> src/merge/ <span class="d">(5 entities)</span>
-  <span class="d">[1]</span> src/driver/ <span class="d">(4 entities)</span>
-  <span class="d">[2]</span> validate <span class="d">(3 entities)</span>
-
-<span class="w">entities</span> <span class="d">(by risk):</span>
-
-  <span class="y">~</span> <span class="r">CRITICAL</span> <span class="d">function</span> <span class="w">merge_entities</span> <span class="d">(src/merge/core.rs)</span>
-    classification: functional  score: 0.82  blast: 171  deps: 3/12
-    <span class="c">public API</span>
-    <span class="r">&gt;&gt;&gt; 12 dependents may be affected</span>
-
-  <span class="r">-</span> <span class="o">HIGH</span> <span class="d">function</span> <span class="w">old_validate</span> <span class="d">(src/validate.rs)</span>
-    classification: functional  score: 0.65  blast: 8  deps: 0/3
-    <span class="c">public API</span>
-
-  <span class="g">+</span> <span class="y">MEDIUM</span> <span class="d">function</span> <span class="w">parse_config</span> <span class="d">(src/config.rs)</span>
-    classification: functional  score: 0.32  blast: 0  deps: 2/0
-
-  <span class="y">~</span> <span class="d">LOW</span> <span class="d">function</span> <span class="w">format_output</span> <span class="d">(src/display.rs)</span>
-    classification: text  score: 0.02  blast: 0  deps: 0/0
-    <span class="d">cosmetic only (no structural change)</span>`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* The Problem */}
-      <section>
-        <h2>The problem</h2>
+      {/* Act 2: The Proof */}
+      <section className="fade-in">
+        <h2>95% recall.</h2>
         <p className="section-desc">
-          <code
-            style={{
-              background: "var(--surface)",
-              padding: "2px 6px",
-              borderRadius: 3,
-              fontSize: 12,
-              color: "var(--cyan)",
-            }}
+          141 planted bugs, 52 PRs, 5 repos.{" "}
+          <a
+            href="https://huggingface.co/datasets/rs545837/inspect-greptile-bench"
+            style={{ color: "var(--cyan)" }}
           >
-            git diff
-          </code>{" "}
-          says 12 files changed. But which changes actually matter? A renamed
-          variable, a reformatted function, and a deleted public API method all
-          look the same in a line-level diff.
+            Dataset on HuggingFace
+          </a>
+          .{" "}
+          <a href="/benchmarks" style={{ color: "var(--cyan)" }}>
+            Full benchmarks {"\u2192"}
+          </a>
         </p>
-        <p
-          style={{
-            fontSize: 14,
-            color: "var(--dim)",
-            lineHeight: 1.7,
-          }}
-        >
-          This gets worse with AI-generated code. DORA 2025 found that AI
-          adoption led to{" "}
-          <strong style={{ color: "var(--accent)" }}>+154% PR size</strong>,{" "}
-          <strong style={{ color: "var(--accent)" }}>+91% review time</strong>,
-          and{" "}
-          <strong style={{ color: "var(--accent)" }}>
-            +9% more bugs shipped
-          </strong>
-          . Reviewers are drowning in noise. inspect works at the entity level:
-          functions, structs, traits, classes. It uses the dependency graph to
-          identify which changes have real impact.
-        </p>
+
+        <div className="bench-group">
+          {[
+            {
+              name: "inspect + GPT-5.2",
+              value: "95.0%",
+              valueColor: "var(--green)",
+              width: 95,
+              cls: "inspect-bar",
+              bold: true,
+            },
+            {
+              name: "Greptile (API)",
+              value: "91.5%",
+              width: 91.5,
+              cls: "other-bar",
+              bold: false,
+            },
+            {
+              name: "CodeRabbit (CLI)",
+              value: "56.0%",
+              width: 56,
+              cls: "dim-bar",
+              bold: false,
+            },
+          ].map((row, i) => (
+            <div className="bench-row" key={i}>
+              <div className="bench-label">
+                <span className="name">
+                  {row.bold ? (
+                    <strong style={{ color: "var(--accent)" }}>
+                      {row.name}
+                    </strong>
+                  ) : (
+                    row.name
+                  )}
+                </span>
+                <span
+                  className="value"
+                  style={
+                    row.valueColor ? { color: row.valueColor } : undefined
+                  }
+                >
+                  {row.value}
+                </span>
+              </div>
+              <div className="bench-bar-track">
+                <div
+                  className={`bench-bar ${row.cls}`}
+                  data-width={row.width}
+                >
+                  {row.value}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="stat-pills">
+          <div className="stat-pill">
+            <span className="val" style={{ color: "var(--green)" }}>
+              100%
+            </span>
+            <span className="lbl">HC recall (every critical bug caught)</span>
+          </div>
+          <div className="stat-pill">
+            <span className="val" style={{ color: "var(--green)" }}>
+              6ms
+            </span>
+            <span className="lbl">per commit</span>
+          </div>
+          <div className="stat-pill">
+            <span className="val" style={{ color: "var(--accent)" }}>0</span>
+            <span className="lbl">API calls needed</span>
+          </div>
+        </div>
       </section>
 
-      {/* How it works */}
-      <section>
-        <h2>How it works</h2>
+      {/* Act 3: How it works */}
+      <section className="fade-in">
+        <h2>Four phases</h2>
         <p className="section-desc">
-          Four phases, all local. No LLM, no network calls. Optionally, send the top entities to an LLM for full review via the cloud API or self-hosted.
+          All local. No LLM, no network calls. Optionally, send the top
+          entities to an LLM for full review.{" "}
+          <a href="/docs" style={{ color: "var(--cyan)" }}>
+            Full docs {"\u2192"}
+          </a>
         </p>
 
         <div className="phase-cards">
@@ -211,8 +310,7 @@ export default function HomePage() {
             <h3>Risk</h3>
             <p>
               Graph-centric scoring. Dependents and blast radius are the primary
-              signals. Public API, classification, and change type set the
-              baseline.
+              signals. Public API and change type set the baseline.
             </p>
           </div>
           <div className="phase-card" style={{ borderColor: "var(--purple)" }}>
@@ -224,135 +322,89 @@ export default function HomePage() {
             </div>
             <h3>Untangle</h3>
             <p>
-              Union-Find on dependency edges between changed entities. Separates
-              independent logical changes within tangled commits.
+              Union-Find on dependency edges. Separates independent logical
+              changes within tangled commits.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Key numbers */}
-      <section>
-        <h2>Results</h2>
+      {/* Languages */}
+      <section className="fade-in">
+        <h2>21 languages</h2>
         <p className="section-desc">
-          Evaluated on{" "}
+          Entity extraction powered by{" "}
           <a
-            href="https://arxiv.org/abs/2601.19494"
-            style={{ color: "var(--cyan)" }}
+            href="https://github.com/Ataraxy-Labs/sem"
+            style={{ color: "var(--green)" }}
           >
-            AACR-Bench
-          </a>
-          . 158 PRs, 50 repos, 10 languages, 1,169 ground truth issues from
-          human reviewers.
-        </p>
-
-        <div className="stat-cards">
-          <div className="stat-card" style={{ borderColor: "var(--green)" }}>
-            <div className="stat-value" style={{ color: "var(--green)" }}>
-              48%
-            </div>
-            <div className="stat-label">recall (High/Critical only)</div>
-            <div className="stat-detail">reviewing 9.5% of the diff</div>
-          </div>
-          <div className="stat-card" style={{ borderColor: "var(--cyan)" }}>
-            <div className="stat-value" style={{ color: "var(--cyan)" }}>
-              78%
-            </div>
-            <div className="stat-label">
-              recall (High/Critical + Medium)
-            </div>
-            <div className="stat-detail">reviewing 19% of the diff</div>
-          </div>
-          <div className="stat-card" style={{ borderColor: "var(--purple)" }}>
-            <div className="stat-value" style={{ color: "var(--purple)" }}>
-              82%
-            </div>
-            <div className="stat-label">total coverage</div>
-            <div className="stat-detail">
-              issues within any changed entity
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-cards" style={{ marginTop: 24 }}>
-          <div className="stat-card" style={{ borderColor: "var(--orange)" }}>
-            <div className="stat-value" style={{ color: "var(--orange)" }}>
-              #1
-            </div>
-            <div className="stat-label">Martian leaderboard</div>
-            <div className="stat-detail">47.5% F1, 137 golden bugs, 50 PRs</div>
-          </div>
-        </div>
-
-        <p
-          style={{
-            fontSize: 14,
-            color: "var(--dim)",
-            lineHeight: 1.7,
-            textAlign: "center",
-          }}
-        >
-          83.5% High/Critical recall on the{" "}
-          <a
-            href="https://www.greptile.com/benchmarks"
-            style={{ color: "var(--cyan)" }}
-          >
-            Greptile benchmark
+            sem-core
           </a>{" "}
-          (50 PRs, 5 repos, 97 golden comments), beating every LLM-based tool
-          at zero cost. 100% recall at the Medium threshold.{" "}
-          <a href="/benchmarks" style={{ color: "var(--cyan)" }}>
-            Full benchmark results {"\u2192"}
+          and tree-sitter. Plus 5 data formats.{" "}
+          <a href="/docs" style={{ color: "var(--cyan)" }}>
+            Full list {"\u2192"}
           </a>
         </p>
+
+        <div className="lang-chips">
+          {[
+            "TypeScript",
+            "JavaScript",
+            "Python",
+            "Go",
+            "Rust",
+            "Java",
+            "C",
+            "C++",
+            "C#",
+            "Ruby",
+            "PHP",
+            "Swift",
+            "Kotlin",
+            "Elixir",
+            "Bash",
+            "HCL",
+            "Fortran",
+            "Vue",
+            "Svelte",
+            "XML",
+            "ERB",
+          ].map((lang) => (
+            <span className="lang-chip" key={lang}>
+              {lang}
+            </span>
+          ))}
+          {["JSON", "YAML", "TOML", "CSV", "Markdown"].map((fmt) => (
+            <span className="lang-chip data" key={fmt}>
+              {fmt}
+            </span>
+          ))}
+        </div>
       </section>
 
-      {/* Part of the stack */}
-      <section>
-        <h2>Part of the Ataraxy Labs stack</h2>
-        <p className="section-desc">
-          Three tools, same foundation: sem-core&apos;s entity extraction and
-          structural hashing.
-        </p>
+      {/* Try it */}
+      <section className="fade-in" style={{ textAlign: "center" }}>
+        <h2>Try it. 5 seconds.</h2>
+        <div className="try-terminal">
+          <div className="terminal">
+            <div className="terminal-bar">
+              <div className="terminal-dot" />
+              <div className="terminal-dot" />
+              <div className="terminal-dot" />
+              <div className="terminal-title">~/my-project</div>
+            </div>
+            <div className="terminal-body" style={{ textAlign: "left" }}>
+              <pre
+                dangerouslySetInnerHTML={{
+                  __html: `<span class="cmd">$ cargo install --git https://github.com/Ataraxy-Labs/inspect inspect-cli</span>
 
-        <div
-          className="phase-cards"
-          style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
-        >
-          <div className="phase-card" style={{ borderColor: "var(--green)" }}>
-            <h3>
-              <a
-                href="https://github.com/Ataraxy-Labs/sem"
-                style={{ color: "var(--green)" }}
-              >
-                sem
-              </a>
-            </h3>
-            <p>
-              Understand code history. What changed, who changed it, what
-              depends on it, what might break.
-            </p>
-          </div>
-          <div className="phase-card" style={{ borderColor: "var(--cyan)" }}>
-            <h3>
-              <a
-                href="https://github.com/Ataraxy-Labs/weave"
-                style={{ color: "var(--cyan)" }}
-              >
-                weave
-              </a>
-            </h3>
-            <p>
-              Merge without false conflicts. 31/31 clean merges on concurrent
-              edit scenarios vs Git&apos;s 15/31.
-            </p>
-          </div>
-          <div className="phase-card" style={{ borderColor: "var(--orange)" }}>
-            <h3>inspect</h3>
-            <p>
-              Review what matters. Graph-based risk scoring, change
-              classification, commit untangling.
-            </p>
+<span class="cmd">$ inspect diff HEAD~1</span>
+<span class="w">inspect</span> 12 entities changed
+  <span class="r">1 critical</span>, <span class="o">2 high</span>, <span class="y">3 medium</span>, <span class="d">6 low</span>
+<span class="d">verdict:</span> <span class="o">requires_careful_review</span>`,
+                }}
+              />
+            </div>
           </div>
         </div>
       </section>

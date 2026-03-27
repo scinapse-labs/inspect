@@ -2,7 +2,6 @@ import Link from "next/link";
 
 export default function Nav({ active }: { active: string }) {
   const links = [
-    { href: "/", label: "Home", key: "home" },
     { href: "/benchmarks", label: "Benchmarks", key: "benchmarks" },
     { href: "/docs", label: "Docs & API", key: "docs" },
     { href: "/changelog", label: "Changelog", key: "changelog" },

@@ -137,6 +137,58 @@ async fn call_openai(
     Ok(content)
 }
 
+/// Call Anthropic Messages API.
+async fn call_anthropic(
+    state: &AppState,
+    system: &str,
+    prompt: &str,
+    temperature: f64,
+) -> Result<String, String> {
+    let api_key = state
+        .anthropic_api_key
+        .as_ref()
+        .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
+
+    let body = serde_json::json!({
+        "model": state.anthropic_model,
+        "max_tokens": 4096,
+        "system": system,
+        "messages": [
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": temperature,
+    });
+
+    let resp = state
+        .http
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Anthropic request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Anthropic API error {status}: {text}"));
+    }
+
+    let body: serde_json::Value = resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+    let content = body
+        .get("content")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|block| block.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    Ok(content)
+}
+
 /// Strip markdown code fences and parse JSON issues.
 fn parse_issues(text: &str) -> Vec<Finding> {
     let cleaned = strip_code_fences(text);
@@ -332,8 +384,8 @@ pub async fn review_raw_lenses(
         call_openai(state, prompts::SYSTEM_TYPOS, &p_typo, 0.0, Some(42)),
         call_openai(state, prompts::SYSTEM_RUNTIME, &p_rt, 0.0, Some(42)),
         call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.0, Some(42)),
-        call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1, Some(42)),
-        call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1, Some(123)),
+        call_anthropic(state, prompts::SYSTEM_REVIEW, &p_gen, 0.0),
+        call_anthropic(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1),
     );
 
     let mut all_findings: Vec<Finding> = Vec::new();
@@ -382,7 +434,7 @@ async fn review_hybrid_inner(
     // 3 general lens prompts
     let p_gen = prompts::format_deep_prompt(pr_title, triage_section, &truncated);
 
-    // 9 lenses in parallel
+    // 9 lenses in parallel: 7 GPT + 2 Sonnet (cross-model diversity)
     let (r1, r2, r3, r4, r5, r6, r7, r8, r9) = tokio::join!(
         call_openai(state, prompts::SYSTEM_DATA, &p_data, 0.0, Some(42)),
         call_openai(state, prompts::SYSTEM_CONCURRENCY, &p_conc, 0.0, Some(42)),
@@ -391,8 +443,8 @@ async fn review_hybrid_inner(
         call_openai(state, prompts::SYSTEM_TYPOS, &p_typo, 0.0, Some(42)),
         call_openai(state, prompts::SYSTEM_RUNTIME, &p_rt, 0.0, Some(42)),
         call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.0, Some(42)),
-        call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1, Some(42)),
-        call_openai(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1, Some(123)),
+        call_anthropic(state, prompts::SYSTEM_REVIEW, &p_gen, 0.0),
+        call_anthropic(state, prompts::SYSTEM_REVIEW, &p_gen, 0.1),
     );
 
     // Merge + dedup
