@@ -123,6 +123,160 @@ export default function DocsPage() {
             </span>
           </div>
         </div>
+
+        <div className="cmd-doc">
+          <div className="cmd-doc-header">
+            <span className="cmd-doc-name">
+              inspect review &lt;ref&gt;
+            </span>
+            <span className="cmd-doc-desc">
+              Triage + LLM review. Triages entities by risk, sends the highest-risk ones to an LLM.
+            </span>
+          </div>
+          <div className="cmd-doc-flags">
+            <div className="flag">
+              <code>--provider &lt;name&gt;</code>{" "}
+              <span>anthropic, openai, or ollama. Auto-inferred from --api-base if omitted.</span>
+            </div>
+            <div className="flag">
+              <code>--model &lt;model&gt;</code>{" "}
+              <span>Model name (e.g. claude-sonnet-4-5-20250929, gpt-4o, llama3)</span>
+            </div>
+            <div className="flag">
+              <code>--api-base &lt;url&gt;</code>{" "}
+              <span>Custom endpoint URL. Automatically uses the OpenAI-compatible client.</span>
+            </div>
+            <div className="flag">
+              <code>--api-key &lt;key&gt;</code>{" "}
+              <span>API key (overrides env var)</span>
+            </div>
+            <div className="flag">
+              <code>--min-risk &lt;level&gt;</code>{" "}
+              <span>
+                Minimum risk to review (default: high)
+              </span>
+            </div>
+            <div className="flag">
+              <code>--max-entities &lt;n&gt;</code>{" "}
+              <span>
+                Cap on entities sent to LLM (default: 10)
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LLM Providers */}
+      <section>
+        <h2>LLM providers</h2>
+        <p className="section-desc">
+          inspect review works with Anthropic, OpenAI, and any OpenAI-compatible
+          server. Use a local LLM for air-gapped or regulated environments.
+        </p>
+
+        <div className="cmd-doc">
+          <div className="cmd-doc-header">
+            <span className="cmd-doc-name">Anthropic (default)</span>
+            <span className="cmd-doc-desc">
+              Uses ANTHROPIC_API_KEY from env
+            </span>
+          </div>
+          <div className="terminal" style={{ marginTop: 12 }}>
+            <div className="terminal-body" style={{ padding: "16px 20px" }}>
+              <pre
+                dangerouslySetInnerHTML={{
+                  __html: `<span class="cmd">$ export ANTHROPIC_API_KEY=sk-ant-...</span>
+<span class="cmd">$ inspect review HEAD~1</span>`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="cmd-doc" style={{ marginTop: 24 }}>
+          <div className="cmd-doc-header">
+            <span className="cmd-doc-name">OpenAI</span>
+            <span className="cmd-doc-desc">
+              Uses OPENAI_API_KEY from env
+            </span>
+          </div>
+          <div className="terminal" style={{ marginTop: 12 }}>
+            <div className="terminal-body" style={{ padding: "16px 20px" }}>
+              <pre
+                dangerouslySetInnerHTML={{
+                  __html: `<span class="cmd">$ export OPENAI_API_KEY=sk-...</span>
+<span class="cmd">$ inspect review HEAD~1 --provider openai --model gpt-4o</span>`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="cmd-doc" style={{ marginTop: 24 }}>
+          <div className="cmd-doc-header">
+            <span className="cmd-doc-name">Ollama (local)</span>
+            <span className="cmd-doc-desc">
+              No API key needed. Runs against localhost.
+            </span>
+          </div>
+          <div className="terminal" style={{ marginTop: 12 }}>
+            <div className="terminal-body" style={{ padding: "16px 20px" }}>
+              <pre
+                dangerouslySetInnerHTML={{
+                  __html: `<span class="d"># Start Ollama, then:</span>
+<span class="cmd">$ inspect review HEAD~1 --provider ollama --model llama3</span>`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="cmd-doc" style={{ marginTop: 24 }}>
+          <div className="cmd-doc-header">
+            <span className="cmd-doc-name">Any OpenAI-compatible server</span>
+            <span className="cmd-doc-desc">
+              vLLM, LM Studio, llama.cpp, etc.
+            </span>
+          </div>
+          <div className="terminal" style={{ marginTop: 12 }}>
+            <div className="terminal-body" style={{ padding: "16px 20px" }}>
+              <pre
+                dangerouslySetInnerHTML={{
+                  __html: `<span class="cmd">$ inspect review HEAD~1 \\</span>
+<span class="cmd">    --api-base http://localhost:8000/v1 \\</span>
+<span class="cmd">    --model my-model</span>`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <table style={{ marginTop: 24 }}>
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>API key env var</th>
+              <th>Default base URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code style={{ color: "var(--cyan)" }}>anthropic</code></td>
+              <td>ANTHROPIC_API_KEY</td>
+              <td>api.anthropic.com</td>
+            </tr>
+            <tr>
+              <td><code style={{ color: "var(--cyan)" }}>openai</code></td>
+              <td>OPENAI_API_KEY</td>
+              <td>api.openai.com/v1</td>
+            </tr>
+            <tr>
+              <td><code style={{ color: "var(--cyan)" }}>ollama</code></td>
+              <td>none</td>
+              <td>localhost:11434/v1</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       {/* Change Classification */}

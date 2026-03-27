@@ -109,6 +109,18 @@ inspect file src/main.rs
 inspect file src/main.rs --context
 ```
 
+### `inspect review <ref>`
+
+Triage + LLM review. Triages entities by risk, sends the highest-risk ones to an LLM for review.
+
+```bash
+inspect review HEAD~1                          # Anthropic (default)
+inspect review HEAD~1 --provider ollama --model llama3  # local Ollama
+inspect review HEAD~1 --api-base http://localhost:8000/v1 --model my-model  # any OpenAI-compatible server
+inspect review HEAD~1 --min-risk medium        # review more entities
+inspect review HEAD~1 --max-entities 20        # send more to LLM
+```
+
 ### `inspect bench --repo <path>`
 
 Benchmark entity-level review across a repo's commit history. Outputs JSON with per-commit details and aggregate metrics.
@@ -116,6 +128,34 @@ Benchmark entity-level review across a repo's commit history. Outputs JSON with 
 ```bash
 inspect bench --repo ~/my-project --limit 50
 ```
+
+## LLM Providers
+
+`inspect review` works with Anthropic, OpenAI, and any OpenAI-compatible server (Ollama, vLLM, LM Studio, llama.cpp). Pass `--api-base` and it auto-detects the right client.
+
+```bash
+# Anthropic (default)
+export ANTHROPIC_API_KEY=sk-ant-...
+inspect review HEAD~1
+
+# OpenAI
+export OPENAI_API_KEY=sk-...
+inspect review HEAD~1 --provider openai --model gpt-4o
+
+# Ollama (local, no API key)
+inspect review HEAD~1 --provider ollama --model llama3
+
+# Any OpenAI-compatible endpoint (vLLM, LM Studio, etc.)
+inspect review HEAD~1 --api-base http://localhost:8000/v1 --model my-model
+```
+
+| Provider | API key env var | Default base URL |
+|----------|----------------|-----------------|
+| `anthropic` | ANTHROPIC_API_KEY | api.anthropic.com |
+| `openai` | OPENAI_API_KEY | api.openai.com/v1 |
+| `ollama` | none | localhost:11434/v1 |
+
+`--api-base` implies the OpenAI-compatible client, so you don't need `--provider` with it. `--provider ollama` implies `localhost:11434`, so you don't need `--api-base` with it.
 
 ## MCP Server
 

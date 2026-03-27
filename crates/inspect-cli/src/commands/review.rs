@@ -6,7 +6,7 @@ use sem_core::git::types::DiffScope;
 
 use crate::OutputFormat;
 use inspect_core::analyze::analyze;
-use inspect_core::llm::{AnthropicClient, EntityLlmReview, LlmVerdict};
+use inspect_core::llm::{AnthropicClient, OpenAIClient, LlmProvider, EntityLlmReview, LlmVerdict};
 use inspect_core::types::RiskLevel;
 
 #[derive(Args)]
@@ -22,7 +22,7 @@ pub struct ReviewArgs {
     #[arg(long, default_value = "high")]
     pub min_risk: String,
 
-    /// Claude model to use
+    /// Model to use (e.g. claude-sonnet-4-5-20250929, gpt-4o, llama3)
     #[arg(long, default_value = "claude-sonnet-4-5-20250929")]
     pub model: String,
 
@@ -33,6 +33,53 @@ pub struct ReviewArgs {
     /// Repository path
     #[arg(short = 'C', long, default_value = ".")]
     pub repo: PathBuf,
+
+    /// LLM provider: anthropic, openai, ollama. Inferred from --api-base if omitted.
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Custom API base URL (e.g. http://localhost:8000/v1). Implies openai provider.
+    #[arg(long)]
+    pub api_base: Option<String>,
+
+    /// API key (overrides env var)
+    #[arg(long)]
+    pub api_key: Option<String>,
+}
+
+fn build_provider(args: &ReviewArgs) -> Result<Box<dyn LlmProvider>, String> {
+    // Infer provider: explicit flag > api-base implies openai > default anthropic
+    let provider = args
+        .provider
+        .as_deref()
+        .unwrap_or_else(|| if args.api_base.is_some() { "openai" } else { "anthropic" });
+
+    match provider {
+        "anthropic" => {
+            let client = AnthropicClient::new(&args.model, args.api_key.as_deref())?;
+            Ok(Box::new(client))
+        }
+        "openai" => {
+            let client = OpenAIClient::new(
+                &args.model,
+                args.api_base.as_deref(),
+                args.api_key.as_deref(),
+            )?;
+            Ok(Box::new(client))
+        }
+        "ollama" => {
+            let base = args
+                .api_base
+                .as_deref()
+                .unwrap_or("http://localhost:11434/v1");
+            let client = OpenAIClient::new(&args.model, Some(base), None)?;
+            Ok(Box::new(client))
+        }
+        other => Err(format!(
+            "Unknown provider '{}'. Use: anthropic, openai, ollama",
+            other
+        )),
+    }
 }
 
 pub async fn run(args: ReviewArgs) {
@@ -71,7 +118,7 @@ pub async fn run(args: ReviewArgs) {
         total_entities, review_count, reduction
     );
 
-    let client = match AnthropicClient::new(&args.model) {
+    let client = match build_provider(&args) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {}", e);

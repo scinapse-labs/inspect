@@ -908,6 +908,7 @@ dependencies = [
 name = "inspect-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "base64",
  "futures",
  "reqwest",
