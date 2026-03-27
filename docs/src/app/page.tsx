@@ -133,7 +133,7 @@ export default function HomePage() {
           onClick={(e) =>
             copyCmd(
               e.currentTarget,
-              "cargo install --git https://github.com/Ataraxy-Labs/inspect inspect-cli"
+              "brew install ataraxy-labs/tap/inspect"
             )
           }
           style={{
@@ -163,8 +163,14 @@ export default function HomePage() {
           >
             copied
           </span>
-          <span style={{ color: "var(--dim)" }}>$</span> cargo install --git
-          ...inspect inspect-cli
+          <span style={{ color: "var(--dim)" }}>$</span> brew install
+          ataraxy-labs/tap/inspect
+        </div>
+        <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 8 }}>
+          or{" "}
+          <code style={{ background: "var(--surface)", padding: "2px 6px", borderRadius: 3 }}>
+            cargo install --git https://github.com/Ataraxy-Labs/inspect inspect-cli
+          </code>
         </div>
       </div>
 
@@ -396,7 +402,7 @@ export default function HomePage() {
             <div className="terminal-body" style={{ textAlign: "left" }}>
               <pre
                 dangerouslySetInnerHTML={{
-                  __html: `<span class="cmd">$ cargo install --git https://github.com/Ataraxy-Labs/inspect inspect-cli</span>
+                  __html: `<span class="cmd">$ brew install ataraxy-labs/tap/inspect</span>
 
 <span class="cmd">$ inspect diff HEAD~1</span>
 <span class="w">inspect</span> 12 entities changed
