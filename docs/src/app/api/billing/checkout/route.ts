@@ -40,11 +40,10 @@ export async function POST(req: Request) {
     if (!customerId) {
       customerId = await createCustomer({ clerk_user_id: userId });
 
-      await supabase.from("credits").upsert({
-        user_id: userId,
-        stripe_customer_id: customerId,
-        balance_cents: 0,
-      });
+      await supabase
+        .from("credits")
+        .update({ stripe_customer_id: customerId })
+        .eq("user_id", userId);
     }
 
     const origin = req.headers.get("origin") || "https://inspect.ataraxy-labs.com";

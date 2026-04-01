@@ -33,6 +33,22 @@ export async function GET() {
     return NextResponse.json({ balance_cents: SIGNUP_BONUS_CENTS });
   }
 
+  // Self-heal: if balance is 0 but transactions exist, recalculate
+  if (data.balance_cents === 0) {
+    const { data: txns } = await supabase
+      .from("credit_transactions")
+      .select("amount_cents")
+      .eq("user_id", userId);
+    const sum = (txns || []).reduce((s: number, t: { amount_cents: number }) => s + t.amount_cents, 0);
+    if (sum > 0) {
+      await supabase
+        .from("credits")
+        .update({ balance_cents: sum })
+        .eq("user_id", userId);
+      return NextResponse.json({ balance_cents: sum });
+    }
+  }
+
   return NextResponse.json({
     balance_cents: data.balance_cents || 0,
   });
