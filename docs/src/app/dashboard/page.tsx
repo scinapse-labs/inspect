@@ -29,6 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [keyCount, setKeyCount] = useState(0);
+  const [balanceCents, setBalanceCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [repo, setRepo] = useState("");
   const [prNumber, setPrNumber] = useState("");
@@ -39,10 +40,12 @@ export default function DashboardPage() {
     Promise.all([
       fetch("/api/reviews?limit=10").then((r) => r.json()),
       fetch("/api/keys").then((r) => r.json()),
+      fetch("/api/billing/balance").then((r) => r.json()),
     ])
-      .then(([reviewData, keyData]) => {
+      .then(([reviewData, keyData, balData]) => {
         setReviews(reviewData.reviews || []);
         setKeyCount((keyData.keys || []).length);
+        setBalanceCents(balData.balance_cents || 0);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -192,7 +195,7 @@ export default function DashboardPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
+              gridTemplateColumns: "1fr 1fr 1fr 1fr",
               gap: 16,
               marginBottom: 40,
             }}
@@ -287,6 +290,38 @@ export default function DashboardPage() {
                 }}
               >
                 {keyCount}
+              </p>
+            </Link>
+
+            <Link
+              href="/dashboard/billing"
+              style={{
+                border: `1px solid ${balanceCents > 0 ? "var(--green)" : "var(--red)"}`,
+                borderRadius: 8,
+                padding: 20,
+                textDecoration: "none",
+                transition: "border-color 0.2s",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "var(--dim)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  marginBottom: 8,
+                }}
+              >
+                Credits
+              </p>
+              <p
+                style={{
+                  fontSize: 32,
+                  fontWeight: 700,
+                  color: balanceCents > 0 ? "var(--green)" : "var(--red)",
+                }}
+              >
+                ${(balanceCents / 100).toFixed(2)}
               </p>
             </Link>
           </div>

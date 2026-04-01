@@ -5,11 +5,11 @@ use sem_core::git::types::DiffScope;
 
 use crate::formatters;
 use crate::OutputFormat;
-use inspect_core::analyze::{analyze_with_options, AnalyzeOptions};
+use inspect_core::predict::{predict_with_options, PredictOptions};
 use inspect_core::types::RiskLevel;
 
 #[derive(Args)]
-pub struct DiffArgs {
+pub struct PredictArgs {
     /// Commit ref or range (e.g. HEAD~1, main..feature, abc123)
     pub target: String,
 
@@ -21,42 +21,37 @@ pub struct DiffArgs {
     #[arg(long)]
     pub min_risk: Option<String>,
 
-    /// Show dependency context
-    #[arg(long)]
-    pub context: bool,
-
-    /// Include full source code of dependent entities (callers/consumers)
-    #[arg(long)]
-    pub dependents: bool,
+    /// Maximum at-risk entities per change
+    #[arg(long, default_value = "10")]
+    pub max_per_change: usize,
 
     /// Repository path
     #[arg(short = 'C', long, default_value = ".")]
     pub repo: PathBuf,
 }
 
-pub fn run(args: DiffArgs) {
+pub fn run(args: PredictArgs) {
     let scope = parse_scope(&args.target);
     let repo = args.repo.canonicalize().unwrap_or(args.repo.clone());
 
-    let options = AnalyzeOptions {
-        include_dependent_code: args.dependents,
-        ..AnalyzeOptions::default()
+    let min_risk = args
+        .min_risk
+        .as_deref()
+        .map(parse_risk_level)
+        .unwrap_or(RiskLevel::Low);
+
+    let options = PredictOptions {
+        max_at_risk_per_change: args.max_per_change,
+        min_risk,
+        ..PredictOptions::default()
     };
 
-    match analyze_with_options(&repo, scope, &options) {
-        Ok(mut result) => {
-            // Filter by min risk if specified
-            if let Some(ref min) = args.min_risk {
-                let min_level = parse_risk_level(min);
-                result.entity_reviews.retain(|r| r.risk_level >= min_level);
-            }
-
-            match args.format {
-                OutputFormat::Terminal => formatters::terminal::print(&result, args.context),
-                OutputFormat::Json => formatters::json::print(&result),
-                OutputFormat::Markdown => formatters::markdown::print(&result, args.context),
-            }
-        }
+    match predict_with_options(&repo, scope, &options) {
+        Ok(result) => match args.format {
+            OutputFormat::Terminal => formatters::predict::print_terminal(&result),
+            OutputFormat::Json => formatters::predict::print_json(&result),
+            OutputFormat::Markdown => formatters::predict::print_markdown(&result),
+        },
         Err(e) => {
             eprintln!("error: {}", e);
             std::process::exit(1);

@@ -63,6 +63,12 @@ export default function DashboardLayout({
               >
                 Usage
               </Link>
+              <Link
+                href="/dashboard/billing"
+                style={{ color: "var(--dim)", textDecoration: "none" }}
+              >
+                Billing
+              </Link>
             </div>
           </div>
           <UserButton />
