@@ -1,13 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/lib/validate-key";
-import { runReview } from "@/lib/run-review";
 import { getSupabase } from "@/lib/supabase";
+import { checkBalance, deductCredits } from "@/lib/credits";
 
 export const maxDuration = 300;
+
+const POLL_INTERVAL = 5000;
+const MAX_POLLS = 55; // ~275s max, under Vercel's 300s limit
 
 export async function POST(req: NextRequest) {
   const keyResult = await validateApiKey(req);
   if (!keyResult.valid) return keyResult.response;
+
+  const balance = await checkBalance(keyResult.userId);
+  if (balance <= 0) {
+    return NextResponse.json(
+      { error: "Insufficient credits. Add credits at https://inspect.ataraxy-labs.com/dashboard/billing" },
+      { status: 402 }
+    );
+  }
+
+  const inspectApiUrl = (process.env.INSPECT_API_URL || "").replace(/"/g, "");
+  const inspectApiKey = (process.env.INSPECT_API_KEY || "").replace(/"/g, "");
+
+  if (!inspectApiUrl || !inspectApiKey) {
+    return NextResponse.json(
+      { error: "Server missing INSPECT_API_URL or INSPECT_API_KEY" },
+      { status: 500 }
+    );
+  }
 
   let body: { repo?: string; pr_number?: number };
   try {
@@ -25,28 +46,73 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runReview(repo, pr_number);
+    // Submit review job to Fly.io v20 API
+    const submitRes = await fetch(`${inspectApiUrl}/v1/review`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${inspectApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ repo, pr_number }),
+    });
 
-    // Store review result (fire and forget)
-    const supabase = getSupabase();
-    supabase
-      .from("reviews")
-      .insert({
-        user_id: keyResult.userId,
-        api_key_id: keyResult.keyId,
-        repo,
-        pr_number,
-        pr_title: result.pr.title,
-        status: "complete",
-        findings: result.findings,
-        summary: { ...result.summary, usage: result.usage },
-        timing: result.timing,
-        pr_meta: result.pr,
-        completed_at: new Date().toISOString(),
-      })
-      .then(() => {});
+    if (!submitRes.ok) {
+      const text = await submitRes.text();
+      return NextResponse.json(
+        { error: `Upstream error: ${text}` },
+        { status: submitRes.status }
+      );
+    }
 
-    return NextResponse.json(result);
+    const { id: jobId } = await submitRes.json();
+
+    // Poll until complete
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+
+      const pollRes = await fetch(`${inspectApiUrl}/v1/review/${jobId}`, {
+        headers: { Authorization: `Bearer ${inspectApiKey}` },
+      });
+
+      if (!pollRes.ok) continue;
+
+      const data = await pollRes.json();
+      if (data.status === "complete") {
+        const result = data.result;
+
+        // Deduct credits based on tokens used
+        const tokensUsed = result?.timing?.total_tokens || 5000;
+        await deductCredits(keyResult.userId, tokensUsed);
+
+        // Store review result (fire and forget)
+        const supabase = getSupabase();
+        supabase
+          .from("reviews")
+          .insert({
+            user_id: keyResult.userId,
+            api_key_id: keyResult.keyId,
+            repo,
+            pr_number,
+            pr_title: result.pr?.title,
+            status: "complete",
+            findings: result.findings,
+            summary: result.summary,
+            timing: result.timing,
+            pr_meta: result.pr,
+            completed_at: new Date().toISOString(),
+          })
+          .then(() => {});
+
+        return NextResponse.json(result);
+      } else if (data.status === "failed") {
+        return NextResponse.json(
+          { error: data.error || "Review failed upstream" },
+          { status: 500 }
+        );
+      }
+    }
+
+    return NextResponse.json({ error: "Review timed out" }, { status: 504 });
   } catch (e: any) {
     return NextResponse.json(
       { error: e.message || "Review failed" },
