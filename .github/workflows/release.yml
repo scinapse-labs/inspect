@@ -47,7 +47,7 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --target ${{ matrix.target }} -p inspect-cli
+        run: cargo build --release --target ${{ matrix.target }} -p inspect-cli ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '--features vendored-openssl' || '' }}
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
