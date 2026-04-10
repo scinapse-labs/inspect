@@ -6,7 +6,18 @@
   <strong>inspect</strong>
 </p>
 
-Entity-level code review for Git. Every code review tool today works at the file or line level. inspect works at the entity level: functions, structs, classes, traits. It scores each change by risk and groups them by logical dependency.
+<p align="center">
+  <strong>Entity-level code review for Git.</strong><br>
+  Triage PRs by structural risk, not line count.
+</p>
+
+inspect is a code review tool that works at the entity level instead of files or lines. It parses your diff with tree-sitter, classifies each changed entity (text-only, syntax, functional), scores it by risk using the cross-file dependency graph, and groups independent changes so tangled commits can be reviewed as separate units.
+
+Every code review tool today shows you files and lines. inspect shows you which functions matter. A renamed variable, a reformatted function, and a deleted public API method all look the same in a line diff. inspect scores the API deletion as critical (high blast radius, many dependents) and the rename as low risk. Review the critical stuff first, skip the noise.
+
+On the Greptile benchmark (141 findings across 52 PRs), inspect achieved 95.0% recall vs Greptile's 91.5% and CodeRabbit's 56.0%. On the Martian benchmark (137 findings, 50 PRs), inspect scored 46.2% F1, beating Augment Code (45.8%) for #1 on their leaderboard.
+
+Agents and CI pipelines consume inspect through JSON output or the built-in MCP server (6 tools). Developers use the CLI to triage locally before pushing.
 
 ## The Problem
 
