@@ -1,4 +1,5 @@
 mod commands;
+mod config;
 mod formatters;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -28,6 +29,12 @@ enum Commands {
     Grep(commands::grep::GrepArgs),
     /// Predict which unchanged entities are at risk of breaking
     Predict(commands::predict::PredictArgs),
+    /// Authenticate with the inspect API
+    Login(commands::login::LoginArgs),
+    /// Remove stored credentials
+    Logout(commands::logout::LogoutArgs),
+    /// Show current auth status
+    Whoami(commands::whoami::WhoamiArgs),
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -49,5 +56,8 @@ async fn main() {
         Commands::Comment(args) => commands::comment::run(args).await,
         Commands::Grep(args) => commands::grep::run(args).await,
         Commands::Predict(args) => commands::predict::run(args),
+        Commands::Login(args) => commands::login::run(args).await,
+        Commands::Logout(args) => commands::logout::run(args),
+        Commands::Whoami(args) => commands::whoami::run(args).await,
     }
 }

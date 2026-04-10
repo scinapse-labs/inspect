@@ -11,7 +11,7 @@ use inspect_core::types::RiskLevel;
 
 #[derive(Args)]
 pub struct ReviewArgs {
-    /// Commit ref or range (e.g. HEAD~1, main..feature, abc123)
+    /// Commit ref, range, or PR number (with --remote)
     pub target: String,
 
     /// Output format
@@ -45,6 +45,18 @@ pub struct ReviewArgs {
     /// API key (overrides env var)
     #[arg(long)]
     pub api_key: Option<String>,
+
+    /// Remote repo (e.g. owner/repo). Target becomes PR number.
+    #[arg(long)]
+    pub remote: Option<String>,
+
+    /// Review strategy (for remote reviews)
+    #[arg(long)]
+    pub strategy: Option<String>,
+
+    /// Timeout in seconds for remote review polling (default: 120)
+    #[arg(long, default_value = "120")]
+    pub timeout: u64,
 }
 
 fn build_provider(args: &ReviewArgs) -> Result<Box<dyn LlmProvider>, String> {
@@ -83,6 +95,10 @@ fn build_provider(args: &ReviewArgs) -> Result<Box<dyn LlmProvider>, String> {
 }
 
 pub async fn run(args: ReviewArgs) {
+    if args.remote.is_some() {
+        return run_remote(args).await;
+    }
+
     let scope = parse_scope(&args.target);
     let repo = args.repo.canonicalize().unwrap_or(args.repo.clone());
 
@@ -276,6 +292,166 @@ fn print_markdown(reviews: &[EntityLlmReview]) {
         }
 
         println!();
+    }
+}
+
+async fn run_remote(args: ReviewArgs) {
+    let remote = args.remote.as_ref().unwrap();
+    let pr_number: u64 = match args.target.parse() {
+        Ok(n) => n,
+        Err(_) => {
+            eprintln!("{}", "error: target must be a PR number when using --remote".red());
+            std::process::exit(1);
+        }
+    };
+
+    let creds = match crate::config::require_credentials() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{}", e.red());
+            std::process::exit(1);
+        }
+    };
+
+    let client = reqwest::Client::new();
+
+    eprintln!(
+        "Submitting review for {} PR #{}...",
+        remote.bold(),
+        pr_number
+    );
+
+    // POST /v1/review
+    let body = serde_json::json!({
+        "repo": remote,
+        "pr_number": pr_number,
+        "strategy": args.strategy,
+    });
+
+    let resp = client
+        .post(format!("{}/v1/review", creds.api_url))
+        .header("Authorization", format!("Bearer {}", creds.api_key))
+        .json(&body)
+        .send()
+        .await;
+
+    let resp = match resp {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{}", format!("error: could not reach API: {e}").red());
+            std::process::exit(1);
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        eprintln!("{}", format!("error: API returned {status}: {text}").red());
+        std::process::exit(1);
+    }
+
+    let create_resp: serde_json::Value = resp.json().await.unwrap();
+    let job_id = create_resp["id"].as_str().unwrap().to_string();
+
+    // Poll GET /v1/review/{id}
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(args.timeout);
+    let poll_interval = std::time::Duration::from_secs(2);
+
+    loop {
+        if std::time::Instant::now() > deadline {
+            eprintln!("{}", format!("error: timed out after {}s", args.timeout).red());
+            std::process::exit(1);
+        }
+
+        tokio::time::sleep(poll_interval).await;
+
+        let poll = client
+            .get(format!("{}/v1/review/{}", creds.api_url, job_id))
+            .header("Authorization", format!("Bearer {}", creds.api_key))
+            .send()
+            .await;
+
+        let poll_resp = match poll {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("  poll error: {e}");
+                continue;
+            }
+        };
+
+        let job: serde_json::Value = poll_resp.json().await.unwrap();
+        let status = job["status"].as_str().unwrap_or("unknown");
+
+        eprint!("\r  Status: {}    ", status);
+
+        match status {
+            "complete" => {
+                eprintln!();
+                print_remote_result(&args, &job);
+                return;
+            }
+            "failed" => {
+                eprintln!();
+                let err = job["error"].as_str().unwrap_or("unknown error");
+                eprintln!("{}", format!("error: review failed: {err}").red());
+                std::process::exit(1);
+            }
+            _ => continue,
+        }
+    }
+}
+
+fn print_remote_result(args: &ReviewArgs, job: &serde_json::Value) {
+    match args.format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&job["result"]).unwrap());
+        }
+        OutputFormat::Markdown | OutputFormat::Terminal => {
+            let result = &job["result"];
+            let triage = &result["triage"];
+            let timing = &result["timing"];
+
+            let verdict = triage["verdict"].as_str().unwrap_or("unknown");
+            let total_entities = triage["total_entities"].as_u64().unwrap_or(0);
+
+            eprintln!(
+                "Triage: {} entities, verdict: {}",
+                total_entities,
+                match verdict {
+                    "approve" => verdict.green().to_string(),
+                    "review" => verdict.yellow().to_string(),
+                    _ => verdict.red().to_string(),
+                }
+            );
+
+            let findings = result["findings"].as_array();
+            let finding_count = findings.map(|f| f.len()).unwrap_or(0);
+
+            if finding_count > 0 {
+                println!("{} findings:", finding_count);
+                for f in findings.unwrap() {
+                    let severity = f["severity"].as_str().unwrap_or("info");
+                    let description = f["description"].as_str().unwrap_or("");
+                    let file = f["file"].as_str().unwrap_or("");
+                    let sev_colored = match severity {
+                        "error" | "critical" | "high" => format!("[{}]", severity).red().to_string(),
+                        "warning" | "medium" => format!("[{}]", severity).yellow().to_string(),
+                        _ => format!("[{}]", severity).dimmed().to_string(),
+                    };
+                    println!("  {} {} in {}", sev_colored, description, file.dimmed());
+                }
+            } else {
+                println!("No findings.");
+            }
+
+            let triage_ms = timing["triage_ms"].as_u64().unwrap_or(0);
+            let review_ms = timing["review_ms"].as_u64().unwrap_or(0);
+            let total_ms = timing["total_ms"].as_u64().unwrap_or(0);
+            eprintln!(
+                "Timing: triage {}ms, review {}ms, total {}ms",
+                triage_ms, review_ms, total_ms
+            );
+        }
     }
 }
 

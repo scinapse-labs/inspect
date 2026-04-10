@@ -3,6 +3,7 @@ mod openai;
 mod prompts;
 mod routes;
 mod state;
+mod webhook;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -39,6 +40,12 @@ async fn main() {
     let supabase_key =
         std::env::var("SUPABASE_SERVICE_ROLE_KEY").expect("SUPABASE_SERVICE_ROLE_KEY required");
 
+    let github_app_id = std::env::var("GITHUB_APP_ID")
+        .ok()
+        .and_then(|v| v.parse().ok());
+    let github_app_private_key = std::env::var("GITHUB_APP_PRIVATE_KEY").ok();
+    let github_webhook_secret = std::env::var("GITHUB_WEBHOOK_SECRET").ok();
+
     let state = Arc::new(AppState {
         port,
         openai_api_key,
@@ -50,12 +57,18 @@ async fn main() {
         jobs: Arc::new(RwLock::new(HashMap::new())),
         supabase_url,
         supabase_key,
+        github_app_id,
+        github_app_private_key,
+        github_webhook_secret,
     });
 
     let app = Router::new()
         .route("/v1/review", axum::routing::post(routes::create_review))
         .route("/v1/review/{id}", axum::routing::get(routes::get_review))
         .route("/v1/triage", axum::routing::post(routes::create_triage))
+        .route("/v1/whoami", axum::routing::get(routes::whoami))
+        .route("/webhook", axum::routing::post(webhook::handle_webhook))
+        .route("/", axum::routing::post(webhook::handle_webhook))
         .route("/health", axum::routing::get(routes::health))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

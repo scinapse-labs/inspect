@@ -163,6 +163,11 @@ pub async fn health() -> impl IntoResponse {
     Json(serde_json::json!({"status": "ok"}))
 }
 
+// GET /v1/whoami
+pub async fn whoami(_api_key: ApiKey) -> impl IntoResponse {
+    Json(serde_json::json!({"status": "authenticated"}))
+}
+
 fn parse_risk_level(s: &str) -> inspect_core::types::RiskLevel {
     match s.to_lowercase().as_str() {
         "critical" => inspect_core::types::RiskLevel::Critical,
