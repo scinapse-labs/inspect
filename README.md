@@ -1,3 +1,7 @@
+> **Part of the [Ataraxy Labs](https://ataraxy-labs.com) stack** — agent-native infrastructure for software development. See also: [sem](https://ataraxy-labs.com/sem) (semantic version control) · [weave](https://ataraxy-labs.com/weave) (entity-level merge driver) · [opensessions](https://github.com/Ataraxy-Labs/opensessions) (tmux sidebar for coding agents).
+>
+> Read the manifesto: https://ataraxy-labs.com/#thesis · Essays: https://ataraxy-labs.com/blogs · LLMs: https://ataraxy-labs.com/llms.txt
+
 <p align="center">
   <img src="assets/logo.svg" alt="inspect" width="80" />
 </p>
