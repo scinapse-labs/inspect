@@ -37,4 +37,4 @@ You can uninstall the GitHub App at any time. Uninstalling stops all data access
 
 ## Contact
 
-Questions about this policy: rs545837@gmail.com
+Questions about this policy: rohan@ataraxy-labs.com
